@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
@@ -23,6 +25,7 @@ union ConnectionEventData
 enum ConnectionEventType
 {
     NEW_MESSAGE,
+    CLOSED
 };
 
 struct ConnectionEvent
@@ -54,8 +57,7 @@ public:
         int nfds = epoll_wait(epoll_fd, epoll_events, 10000, 100);
         if (nfds == -1)
         {
-            perror("epoll_wait");
-            return -1;
+            throw "failed to epoll_wait";
         }
 
         int event_count = 0;
@@ -65,7 +67,21 @@ public:
             {
                 char buffer[10000];
                 int recv_length = recv(socket_fd, buffer, sizeof(buffer), 0);
+
+                if (recv_length < 0)
+                {
+                    throw "failed to recv";
+                }
+
                 ConnectionEvent connection_event;
+                if (recv_length == 0)
+                {
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, socket_fd, NULL);
+                    connection_event.type = CLOSED;
+                    events[event_count++] = connection_event;
+                    continue;
+                }
+
                 connection_event.type = NEW_MESSAGE;
                 connection_event.data.message.size = recv_length;
                 memcpy(connection_event.data.message.buffer, buffer, recv_length);
@@ -115,7 +131,6 @@ public:
             perror("epoll_create1");
             exit(EXIT_FAILURE);
         }
-        struct epoll_event event, events[100];
         int socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (socket_fd == -1)
         {
@@ -123,8 +138,9 @@ public:
             exit(EXIT_FAILURE);
         }
 
+        struct epoll_event event, events[100];
         event.data.fd = socket_fd;
-        event.events = EPOLLIN | EPOLLET;
+        event.events = EPOLLOUT | EPOLLIN | EPOLLET;
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, socket_fd, &event) == -1)
         {
             perror("epoll_ctl");
@@ -139,10 +155,7 @@ public:
 
         ::connect(socket_fd, (sockaddr *)&server_addr, sizeof(server_addr));
 
-        cout << "P1" << endl;
-        int nfds = epoll_wait(epoll_fd, events, 100, 1000);
-        cout << "P2" << endl;
-        cout << "nfds val : " << nfds << endl;
+        int nfds = epoll_wait(epoll_fd, events, 100, -1);
         if (nfds == -1)
         {
             perror("epoll_wait");
@@ -163,14 +176,16 @@ public:
 
     void listen(const char *ip, short port)
     {
-        int socket_fd = socket(PF_INET, SOCK_STREAM, 0);
-        if (socket_fd < 0)
+        server_fd = socket(PF_INET, SOCK_STREAM, 0);
+        if (server_fd < 0)
         {
-            perror("failed to create socket");
-            exit(1);
+            throw "failed to create socket";
         }
 
-        fcntl(socket_fd, F_SETFL, O_NONBLOCK);
+        if (fcntl(server_fd, F_SETFL, O_NONBLOCK) < 0)
+        {
+            throw "failed to set socket to nonblock";
+        }
 
         sockaddr_in host_addr;
         memset(&host_addr, 0, sizeof(host_addr));
@@ -178,28 +193,28 @@ public:
         host_addr.sin_port = htons(port);
         host_addr.sin_addr.s_addr = inet_addr(ip);
 
-        if (bind(socket_fd, (sockaddr *)&host_addr, sizeof(sockaddr)) < 0)
+        if (bind(server_fd, (sockaddr *)&host_addr, sizeof(sockaddr)) < 0)
         {
-            perror("failed to bind");
-            exit(1);
+            throw "failed to bind";
         }
 
-        if (::listen(socket_fd, 10) < 0)
+        if (::listen(server_fd, 10) < 0)
         {
-            perror("failed to listen");
-            exit(1);
+            throw "failed to listen";
         }
 
         epoll_fd = epoll_create1(0);
         if (epoll_fd < 0)
         {
-            perror("failed to create epoll");
-            exit(1);
+            throw "failed to create epoll";
         }
         epoll_event ev;
         ev.events = EPOLLIN;
         ev.data.fd = server_fd;
-        epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &ev);
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &ev) < 0)
+        {
+            throw "failed to add fd to epoll";
+        }
     }
 
     int poll(NetEvent *events)
@@ -207,17 +222,13 @@ public:
         epoll_event epoll_events[10000];
         int nfds = epoll_wait(epoll_fd, epoll_events, 10000, 100);
         if (nfds < 0)
-        {
-            perror("failed to epoll_wait");
-            return -1;
-        }
+            throw "failed to epoll wait";
 
         int event_count = 0;
         for (int i = 0; i < nfds; ++i)
         {
             if (epoll_events[i].data.fd == server_fd)
             {
-
                 sockaddr_in client_addr;
                 socklen_t len = sizeof(client_addr);
                 int client_fd = accept(server_fd, (sockaddr *)&client_addr, &len);

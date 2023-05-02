@@ -1,14 +1,17 @@
 {
-    "files.associations": {
-        "cstdio": "cpp",
-        "*.tcc": "cpp",
-        "fstream": "cpp",
-        "iostream": "cpp",
-        "socket": "cpp",
-        "buffer": "cpp",
-        "array": "cpp",
-        "string": "cpp",
-        "internet": "cpp",
-        "string_view": "cpp"
-    }
+  "files.associations": {
+    "*.embeddedhtml": "html",
+    "*.html": "html",
+    "cstdio": "cpp",
+    "*.tcc": "cpp",
+    "fstream": "cpp",
+    "iostream": "cpp",
+    "socket": "cpp",
+    "buffer": "cpp",
+    "array": "cpp",
+    "string": "cpp",
+    "internet": "cpp",
+    "string_view": "cpp",
+    "cstdlib": "cpp"
+  }
 }

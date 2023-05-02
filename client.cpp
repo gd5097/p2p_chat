@@ -1,5 +1,5 @@
 #include <iostream>
-#include <stdio.h>
+#include <cstdio>
 #include <string>
 #include "net.hpp"
 
@@ -11,13 +11,15 @@ int main()
 
     Connection connection = net.connect("127.0.0.1", 6457);
 
+    char buffer[10000];
     while (true)
     {
-        string msg;
-        cout << "> ";
-        cin >> msg;
+        if (fgets(buffer, sizeof(buffer), stdin) == NULL)
+        {
+            break;
+        }
 
-        connection.write(msg.c_str(), msg.length() + 1);
+        connection.write(buffer, strlen(buffer) + 1);
     }
 
     net.close();
